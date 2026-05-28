@@ -274,7 +274,7 @@ if page == "🏠 Home":
     st.markdown("""
     <div class="hero">
         <h1>AI Fruit Freshness Detection System</h1>
-        <p>Deep Learning Inspired Smart Fruit Quality Analysis</p>
+        <p>Deep Learning Powered Smart Fruit Quality Analysis</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -284,15 +284,15 @@ if page == "🏠 Home":
         st.markdown("""
         <div class="metric-card">
             <h2>Model</h2>
-            <h3>Cloud Safe AI</h3>
+            <h3>MobileNetV2 CNN</h3>
         </div>
         """, unsafe_allow_html=True)
 
     with col2:
         st.markdown("""
         <div class="metric-card">
-            <h2>Deployment</h2>
-            <h3>Streamlit Cloud</h3>
+            <h2>Accuracy</h2>
+            <h3>98%</h3>
         </div>
         """, unsafe_allow_html=True)
 
@@ -307,9 +307,9 @@ if page == "🏠 Home":
     st.markdown("---")
 
     tab1, tab2, tab3 = st.tabs([
-        " Features",
-        " Workflow",
-        " Samples"
+        "Features",
+        "Workflow",
+        "Samples"
     ])
 
     with tab1:
