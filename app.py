@@ -332,9 +332,6 @@ if page == "🏠 Home":
         with c1:
             st.info("Supports image upload and live camera capture.")
 
-        with c2:
-            st.success("Fully deployable.")
-
     with tab2:
 
         workflow = pd.DataFrame({
