@@ -744,13 +744,13 @@ elif page == " About":
     ):
 
         st.write("""
-        This project is an AI-powered Fruit Freshness Classification System developed using Deep Learning and MobileNetV2. The system is designed to automatically determine whether a fruit is fresh or rotten by analyzing fruit images. It uses Artificial Intelligence (AI) and Computer Vision techniques to perform image-based classification accurately and efficiently.
+            This project is an AI-powered Fruit Freshness Classification System developed using Deep Learning and MobileNetV2. The system is designed to automatically determine whether a fruit is fresh or rotten by analyzing fruit images. It uses Artificial Intelligence (AI) and Computer Vision techniques to perform image-based classification accurately and efficiently.
 
-       The core of the system is based on Deep Learning, a subset of Artificial Intelligence that enables computers to learn patterns and features automatically from data. Instead of manually defining image features such as color, texture, or shape, the deep learning model learns these characteristics directly from thousands of training images.
+           The core of the system is based on Deep Learning, a subset of Artificial Intelligence that enables computers to learn patterns and features automatically from data. Instead of manually defining image features such as color, texture, or shape, the deep learning model learns these characteristics directly from thousands of training images.
 
-        The project uses MobileNetV2, a lightweight and efficient Convolutional Neural Network (CNN) architecture developed for image classification tasks. MobileNetV2 is particularly suitable for real-time applications because it provides high accuracy while requiring less computational power and memory compared to larger deep learning models.
+            The project uses MobileNetV2, a lightweight and efficient Convolutional Neural Network (CNN) architecture developed for image classification tasks. MobileNetV2 is particularly suitable for real-time applications because it provides high accuracy while requiring less computational power and memory compared to larger deep learning models.
 
-        During training, the model learns important visual patterns associated with fresh and rotten fruits, such as:
+            During training, the model learns important visual patterns associated with fresh and rotten fruits, such as:
 
             Color changes
             Texture differences
@@ -758,11 +758,11 @@ elif page == " About":
             Surface damage
             Shape irregularities
 
-        When a user uploads a fruit image, the system first preprocesses the image by resizing and normalizing it. The processed image is then passed to the trained MobileNetV2 model, which predicts whether the fruit is fresh or rotten. The system also displays a confidence score indicating how certain the model is about its prediction.
+            When a user uploads a fruit image, the system first preprocesses the image by resizing and normalizing it. The processed image is then passed to the trained MobileNetV2 model, which predicts whether the fruit is fresh or rotten. The system also displays a confidence score indicating how certain the model is about its prediction.
 
-        In addition, the project integrates Explainable AI using Grad-CAM (Gradient-weighted Class Activation Mapping). This technique generates heatmaps to highlight the image regions that most influenced the model’s prediction, improving transparency and interpretability.
+            In addition, the project integrates Explainable AI using Grad-CAM (Gradient-weighted Class Activation Mapping). This technique generates heatmaps to highlight the image regions that most influenced the model’s prediction, improving transparency and interpretability.
 
-        The entire system is deployed using Streamlit, an interactive Python framework for building machine learning web applications. The dashboard allows users to upload images, view predictions, analyze confidence scores, generate PDF reports, and visualize Explainable AI heatmaps in real time.""")
+            The entire system is deployed using Streamlit, an interactive Python framework for building machine learning web applications. The dashboard allows users to upload images, view predictions, analyze confidence scores, generate PDF reports, and visualize Explainable AI heatmaps in real time.""")
 
        """)
 
