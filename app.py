@@ -333,7 +333,7 @@ if page == "🏠 Home":
             st.info("Supports image upload and live camera capture.")
 
         with c2:
-            st.success("Fully deployable without TensorFlow dependency.")
+            st.success("Fully deployable.")
 
     with tab2:
 
