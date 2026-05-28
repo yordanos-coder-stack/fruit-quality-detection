@@ -764,7 +764,7 @@ elif page == " About":
 
             The entire system is deployed using Streamlit, an interactive Python framework for building machine learning web applications. The dashboard allows users to upload images, view predictions, analyze confidence scores, generate PDF reports, and visualize Explainable AI heatmaps in real time.""")
 
-       """)
+            """)
 
     with st.expander(
         " Technologies Used"
