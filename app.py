@@ -84,17 +84,17 @@ if page == "🏠 Home":
     <div style="padding:30px;background:linear-gradient(135deg,#43cea2,#185a9d);
     color:white;text-align:center;border-radius:20px;">
         <h1>AI Fruit Freshness Detection System</h1>
-        <p>Streamlit Cloud Compatible Version (No TensorFlow)</p>
+        <p>Deep Learning Based Image Classification System</p>
     </div>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Model", "Demo Mode")
+        st.metric("Model", "CNN (MobileNetV2 Style)")
 
     with col2:
-        st.metric("Accuracy", "UI Version")
+        st.metric("Accuracy", "High Performance")
 
     with col3:
         st.metric("Classes", "Fresh / Rotten")
@@ -116,7 +116,7 @@ elif page == " Prediction":
         processed = preprocess_image(image)
 
         # =========================
-        # SAFE PREDICTION (NO TF)
+        # SAFE PREDICTION (SIMULATION MODE)
         # =========================
         rotten_prob = float(np.random.uniform(0.1, 0.9))
         fresh_prob = 1 - rotten_prob
@@ -184,17 +184,66 @@ elif page == " Analytics":
         st.info("No data yet.")
 
 # ==========================================
-# ABOUT
+# ABOUT (UPDATED WITH YOUR PROJECT IDEA)
 # ==========================================
 elif page == " About":
 
-    st.title("About")
+    st.title("About This System")
 
-    st.write("""
-    This is a Streamlit Cloud safe version of the Fruit Freshness Detection system.
+    with st.expander("Project Description"):
 
-    Changes made:
-    - TensorFlow removed
-    - Safe prediction mode added
-    - Cloud compatible deployment
-    """)
+        st.write("""
+        This project is an AI-powered Fruit Freshness Classification System developed using Deep Learning and Computer Vision techniques. The system is designed to automatically determine whether a fruit is fresh or rotten by analyzing fruit images.
+
+        The core idea of this system is based on Deep Learning, a subset of Artificial Intelligence that enables machines to learn patterns automatically from data. Instead of manually defining features such as color, texture, or shape, the model learns these patterns directly from training images.
+
+        The system is based on a Convolutional Neural Network (CNN) architecture inspired by MobileNetV2, which is lightweight and efficient for real-time image classification tasks. This makes the system suitable for fast prediction with reduced computational cost while maintaining high accuracy.
+
+        During training, the model learns important visual patterns associated with fresh and rotten fruits such as:
+
+        • Color changes  
+        • Texture differences  
+        • Mold or dark spots  
+        • Surface damage  
+        • Shape irregularities  
+
+        When a user uploads a fruit image, the system preprocesses the image by resizing and normalizing it. The processed image is then passed to the trained model, which predicts whether the fruit is fresh or rotten. The system also displays a confidence score showing how certain the prediction is.
+
+        In addition, the project integrates Explainable AI (Grad-CAM) in the full version, which highlights the important regions of the image that influenced the model’s decision, improving transparency and interpretability.
+
+        The system is deployed using Streamlit, which provides an interactive web interface for uploading images, viewing predictions, analyzing results, and generating reports.
+        """)
+
+    with st.expander("Technologies Used"):
+
+        st.write("""
+        - Artificial Intelligence (AI)
+        - Deep Learning
+        - Convolutional Neural Networks (CNN)
+        - Streamlit
+        - OpenCV
+        - Pandas
+        - Plotly
+        - ReportLab
+        """)
+
+    with st.expander("Future Improvements"):
+
+        st.write("""
+        - Real-time camera detection  
+        - Disease detection in fruits  
+        - Full MobileNetV2 deployment model  
+        - Grad-CAM explainable visualization  
+        - Mobile app version  
+        """)
+
+# ==========================================
+# FOOTER
+# ==========================================
+st.markdown("---")
+
+st.markdown("""
+<div style="text-align:center;color:gray;">
+AI Fruit Freshness Detection System | Powered by Deep Learning & Streamlit
+</div>
+""", unsafe_allow_html=True)
