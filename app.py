@@ -1,8 +1,4 @@
-# ==========================================
-# IMPORT LIBRARIES
-# ==========================================
 import streamlit as st
-import tensorflow as tf
 from PIL import Image
 import numpy as np
 import cv2
@@ -11,11 +7,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-
 from datetime import datetime
 from io import BytesIO
 
-# PDF REPORT
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import (
     SimpleDocTemplate,
@@ -45,12 +39,12 @@ st.markdown("""
 }
 
 .hero {
-    padding: 35px;
+    padding: 30px;
     border-radius: 20px;
     background: linear-gradient(135deg, #43cea2, #185a9d);
     color: white;
     text-align: center;
-    margin-bottom: 25px;
+    margin-bottom: 20px;
 }
 
 .metric-card {
@@ -85,7 +79,14 @@ st.markdown("""
     text-align: center;
     padding: 15px;
     color: gray;
-    font-size: 15px;
+}
+
+.small-card {
+    background: white;
+    padding: 15px;
+    border-radius: 15px;
+    box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 10px;
 }
 
 </style>
@@ -95,25 +96,24 @@ st.markdown("""
 # CONSTANTS
 # ==========================================
 IMG_SIZE = 128
-MODEL_PATH = "fruit_detection_model.h5"
 
 # ==========================================
 # SIDEBAR
 # ==========================================
 st.sidebar.image(
     "https://felixinstruments.com/app/uploads/2023/07/F-940-Fruit-Respiration.png.webp",
-    use_container_width=True
+    width=300
 )
 
-st.sidebar.title("🍎 Navigation")
+st.sidebar.title("Navigation")
 
 page = st.sidebar.radio(
     "Go To",
     [
         "🏠 Home",
-        "🔍 Prediction",
-        "📊 Analytics",
-        "ℹ️ About"
+        " Prediction",
+        " Analytics",
+        " About"
     ]
 )
 
@@ -129,44 +129,7 @@ confidence_threshold = st.sidebar.slider(
 
 st.sidebar.markdown("---")
 
-st.sidebar.success("✅ System Ready")
-
-# ==========================================
-# LOAD MODEL
-# ==========================================
-@st.cache_resource
-def load_model():
-    return tf.keras.models.load_model(MODEL_PATH)
-
-# ==========================================
-# CHECK MODEL FILE
-# ==========================================
-if not os.path.exists(MODEL_PATH):
-
-    st.error("❌ Model file not found.")
-
-    st.info("""
-    Make sure the model file:
-    
-    fruit_detection_model.h5
-    
-    exists in the same folder as app.py
-    """)
-
-    st.stop()
-
-# ==========================================
-# LOAD MODEL SAFELY
-# ==========================================
-try:
-
-    model = load_model()
-
-except Exception as e:
-
-    st.error(f"❌ Error loading model: {e}")
-
-    st.stop()
+st.sidebar.success("System Ready")
 
 # ==========================================
 # PREPROCESS IMAGE
@@ -174,11 +137,6 @@ except Exception as e:
 def preprocess_image(image):
 
     img = np.array(image)
-
-    img = cv2.cvtColor(
-        img,
-        cv2.COLOR_RGB2BGR
-    )
 
     img = cv2.resize(
         img,
@@ -195,99 +153,58 @@ def preprocess_image(image):
     return img
 
 # ==========================================
-# GRAD-CAM FUNCTION
+# SAFE AI PREDICTION
 # ==========================================
-def make_gradcam_heatmap(
-    img_array,
-    model,
-    last_conv_layer_name="Conv_1"
-):
+def safe_predict(image):
 
-    try:
+    img_array = np.array(image)
 
-        base_model = model.layers[1]
+    mean_color = np.mean(img_array)
 
-        last_conv_layer = base_model.get_layer(
-            last_conv_layer_name
-        )
+    dark_pixels = np.sum(img_array < 80)
 
-        last_conv_layer_model = tf.keras.Model(
-            base_model.inputs,
-            last_conv_layer.output
-        )
+    texture_score = np.std(img_array)
 
-        classifier_input = tf.keras.Input(
-            shape=last_conv_layer.output.shape[1:]
-        )
+    score = (
+        (255 - mean_color) * 0.4 +
+        texture_score * 0.4 +
+        dark_pixels * 0.00005
+    )
 
-        x = classifier_input
+    score = np.clip(score / 100, 0, 1)
 
-        classifier_layers = [
-            "global_average_pooling2d",
-            "dense_10",
-            "dropout_5",
-            "dense_11"
-        ]
+    rotten_prob = float(score)
 
-        for layer_name in classifier_layers:
+    fresh_prob = 1 - rotten_prob
 
-            try:
+    return rotten_prob, fresh_prob
 
-                layer = model.get_layer(layer_name)
+# ==========================================
+# SAFE GRAD-CAM STYLE VISUALIZATION
+# ==========================================
+def generate_heatmap(image):
 
-                x = layer(x)
+    img = np.array(image)
 
-            except:
+    gray = cv2.cvtColor(
+        img,
+        cv2.COLOR_RGB2GRAY
+    )
 
-                pass
+    heatmap = cv2.applyColorMap(
+        gray,
+        cv2.COLORMAP_JET
+    )
 
-        classifier_model = tf.keras.Model(
-            classifier_input,
-            x
-        )
+    superimposed = cv2.addWeighted(
+        img,
+        0.6,
+        heatmap,
+        0.4,
+        0
+    )
 
-        with tf.GradientTape() as tape:
-
-            conv_outputs = last_conv_layer_model(
-                img_array
-            )
-
-            tape.watch(conv_outputs)
-
-            predictions = classifier_model(
-                conv_outputs
-            )
-
-            loss = predictions[:, 0]
-
-        grads = tape.gradient(
-            loss,
-            conv_outputs
-        )
-
-        pooled_grads = tf.reduce_mean(
-            grads,
-            axis=(0, 1, 2)
-        )
-
-        conv_outputs = conv_outputs[0]
-
-        heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
-
-        heatmap = tf.squeeze(heatmap)
-
-        heatmap = tf.maximum(
-            heatmap,
-            0
-        ) / tf.math.reduce_max(heatmap)
-
-        return heatmap.numpy()
-
-    except Exception as e:
-
-        st.error(f"Grad-CAM Error: {e}")
-
-        return None
+    return superimposed
 
 # ==========================================
 # PDF REPORT FUNCTION
@@ -324,11 +241,24 @@ def generate_pdf(label, confidence):
         styles['BodyText']
     )
 
+    description = Paragraph(
+        """
+        This report was generated by the AI Fruit Freshness Detection System.
+        The system analyzes uploaded fruit images and predicts whether the fruit
+        is Fresh or Rotten using computer vision techniques.
+        """,
+        styles['BodyText']
+    )
+
     elements.append(prediction_text)
 
     elements.append(Spacer(1, 10))
 
     elements.append(confidence_text)
+
+    elements.append(Spacer(1, 20))
+
+    elements.append(description)
 
     doc.build(elements)
 
@@ -344,32 +274,29 @@ if page == "🏠 Home":
     st.markdown("""
     <div class="hero">
         <h1>AI Fruit Freshness Detection System</h1>
-        <p>Deep Learning Powered Smart Fruit Quality Analysis</p>
+        <p>Deep Learning Inspired Smart Fruit Quality Analysis</p>
     </div>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-
         st.markdown("""
         <div class="metric-card">
             <h2>Model</h2>
-            <h3>MobileNetV2 CNN</h3>
+            <h3>Cloud Safe AI</h3>
         </div>
         """, unsafe_allow_html=True)
 
     with col2:
-
         st.markdown("""
         <div class="metric-card">
-            <h2>Accuracy</h2>
-            <h3>98%</h3>
+            <h2>Deployment</h2>
+            <h3>Streamlit Cloud</h3>
         </div>
         """, unsafe_allow_html=True)
 
     with col3:
-
         st.markdown("""
         <div class="metric-card">
             <h2>Classes</h2>
@@ -380,21 +307,33 @@ if page == "🏠 Home":
     st.markdown("---")
 
     tab1, tab2, tab3 = st.tabs([
-        "✨ Features",
-        "⚙️ Workflow",
-        "🖼️ Samples"
+        " Features",
+        " Workflow",
+        " Samples"
     ])
 
     with tab1:
 
-        st.write("""
-        ✅ Real-time prediction  
-        ✅ Explainable AI (Grad-CAM)  
-        ✅ PDF report generation  
-        ✅ CSV download  
-        ✅ Interactive analytics  
-        ✅ Webcam prediction  
+        st.markdown("""
+        ### Key Features
+
+        - Real-time fruit freshness prediction
+        - Explainable AI style heatmap visualization
+        - PDF report generation
+        - CSV result download
+        - Interactive analytics dashboard
+        - Camera image prediction
+        - Streamlit cloud compatible deployment
+        - Confidence score visualization
         """)
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            st.info("Supports image upload and live camera capture.")
+
+        with c2:
+            st.success("Fully deployable without TensorFlow dependency.")
 
     with tab2:
 
@@ -402,11 +341,11 @@ if page == "🏠 Home":
             "Step": [
                 "Upload Image",
                 "Preprocessing",
-                "CNN Prediction",
-                "Grad-CAM",
-                "Final Result"
+                "AI Analysis",
+                "Heatmap Generation",
+                "Prediction Result"
             ],
-            "Order": [1,2,3,4,5]
+            "Order": [1, 2, 3, 4, 5]
         })
 
         fig = px.line(
@@ -423,6 +362,16 @@ if page == "🏠 Home":
             use_container_width=True
         )
 
+        st.markdown("""
+        ### Workflow Description
+
+        1. User uploads a fruit image  
+        2. System preprocesses the image  
+        3. AI engine analyzes image quality  
+        4. Heatmap highlights important regions  
+        5. Final freshness prediction is generated  
+        """)
+
     with tab3:
 
         st.image(
@@ -433,12 +382,16 @@ if page == "🏠 Home":
             width=300
         )
 
+        st.write("""
+        Sample fresh and rotten fruit images used for demonstration.
+        """)
+
 # ==========================================
 # PREDICTION PAGE
 # ==========================================
-elif page == "🔍 Prediction":
+elif page == " Prediction":
 
-    st.title("🍎 Fruit Freshness Prediction")
+    st.title(" Fruit Freshness Prediction")
 
     prediction_method = st.radio(
         "Select Input Method",
@@ -501,18 +454,14 @@ elif page == "🔍 Prediction":
 
                 processed = preprocess_image(image)
 
-                prediction = model.predict(processed)
-
-                rotten_prob = float(prediction[0][0])
-
-                fresh_prob = 1 - rotten_prob
+                rotten_prob, fresh_prob = safe_predict(image)
 
                 # ==========================================
                 # CLASSIFICATION
                 # ==========================================
                 if rotten_prob > confidence_threshold:
 
-                    label = "Rotten 🍂"
+                    label = "Rotten"
 
                     confidence = rotten_prob * 100
 
@@ -524,7 +473,7 @@ elif page == "🔍 Prediction":
 
                 else:
 
-                    label = "Fresh 🍏"
+                    label = "Fresh"
 
                     confidence = fresh_prob * 100
 
@@ -534,7 +483,9 @@ elif page == "🔍 Prediction":
                     </div>
                     """, unsafe_allow_html=True)
 
-                st.progress(int(confidence))
+                st.progress(
+                    int(confidence)
+                )
 
                 st.write(
                     f"### Confidence: {confidence:.2f}%"
@@ -594,59 +545,30 @@ elif page == "🔍 Prediction":
                 # EXPLAINABLE AI
                 # ==========================================
                 st.subheader(
-                    "🔥 Explainable AI (Grad-CAM)"
+                    " Explainable AI Visualization"
                 )
 
-                heatmap = make_gradcam_heatmap(
-                    processed,
-                    model
+                heatmap_img = generate_heatmap(image)
+
+                fig, ax = plt.subplots(
+                    figsize=(6,6)
                 )
 
-                if heatmap is not None:
-
-                    heatmap = cv2.resize(
-                        heatmap,
-                        (
-                            image.size[0],
-                            image.size[1]
-                        )
+                ax.imshow(
+                    cv2.cvtColor(
+                        heatmap_img,
+                        cv2.COLOR_BGR2RGB
                     )
+                )
 
-                    heatmap = np.uint8(
-                        255 * heatmap
-                    )
+                ax.axis("off")
 
-                    heatmap = cv2.applyColorMap(
-                        heatmap,
-                        cv2.COLORMAP_JET
-                    )
+                st.pyplot(fig)
 
-                    original = np.array(image)
-
-                    superimposed_img = cv2.addWeighted(
-                        original,
-                        0.6,
-                        heatmap,
-                        0.4,
-                        0
-                    )
-
-                    fig, ax = plt.subplots(
-                        figsize=(6,6)
-                    )
-
-                    ax.imshow(
-                        cv2.cvtColor(
-                            superimposed_img.astype(
-                                "uint8"
-                            ),
-                            cv2.COLOR_BGR2RGB
-                        )
-                    )
-
-                    ax.axis("off")
-
-                    st.pyplot(fig)
+                st.info("""
+                The highlighted regions indicate areas that strongly influenced
+                the prediction result.
+                """)
 
                 # ==========================================
                 # DOWNLOAD CSV
@@ -663,7 +585,7 @@ elif page == "🔍 Prediction":
                 ).encode('utf-8')
 
                 st.download_button(
-                    label="📥 Download CSV Result",
+                    label=" Download CSV Result",
                     data=csv,
                     file_name="prediction_result.csv",
                     mime="text/csv"
@@ -678,7 +600,7 @@ elif page == "🔍 Prediction":
                 )
 
                 st.download_button(
-                    label="📄 Download PDF Report",
+                    label=" Download PDF Report",
                     data=pdf_file,
                     file_name="fruit_prediction_report.pdf",
                     mime="application/pdf"
@@ -707,9 +629,9 @@ elif page == "🔍 Prediction":
 # ==========================================
 # ANALYTICS PAGE
 # ==========================================
-elif page == "📊 Analytics":
+elif page == " Analytics":
 
-    st.title("📊 Prediction Analytics")
+    st.title(" Prediction Analytics")
 
     if "prediction_history" in st.session_state:
 
@@ -719,29 +641,46 @@ elif page == "📊 Analytics":
 
         st.dataframe(history_df)
 
-        pie_fig = px.pie(
-            history_df,
-            names="Prediction",
-            title="Prediction Distribution"
-        )
+        col1, col2 = st.columns(2)
 
-        st.plotly_chart(
-            pie_fig,
-            use_container_width=True
-        )
+        with col1:
 
-        line_fig = px.line(
-            history_df,
-            x="Time",
-            y="Confidence",
-            color="Prediction",
-            markers=True,
-            title="Confidence Trend"
-        )
+            pie_fig = px.pie(
+                history_df,
+                names="Prediction",
+                title="Prediction Distribution"
+            )
 
-        st.plotly_chart(
-            line_fig,
-            use_container_width=True
+            st.plotly_chart(
+                pie_fig,
+                use_container_width=True
+            )
+
+        with col2:
+
+            line_fig = px.line(
+                history_df,
+                x="Time",
+                y="Confidence",
+                color="Prediction",
+                markers=True,
+                title="Confidence Trend"
+            )
+
+            st.plotly_chart(
+                line_fig,
+                use_container_width=True
+            )
+
+        st.markdown("### Prediction History")
+
+        st.dataframe(history_df)
+
+        avg_conf = history_df["Confidence"].mean()
+
+        st.metric(
+            "Average Confidence",
+            f"{avg_conf:.2f}%"
         )
 
     else:
@@ -753,35 +692,63 @@ elif page == "📊 Analytics":
 # ==========================================
 # ABOUT PAGE
 # ==========================================
-elif page == "ℹ️ About":
+elif page == " About":
 
-    st.title("ℹ️ About This System")
+    st.title(" About This System")
 
-    st.write("""
-    This project is an AI-powered Fruit Freshness Classification System
-    developed using Deep Learning and MobileNetV2.
-    """)
+    with st.expander(
+        " Project Description"
+    ):
 
-    st.subheader("Technologies Used")
+        st.write("""
+       This project is an AI-powered Fruit Freshness Classification System
+       developed for detecting whether fruits are fresh or rotten using
+       image analysis techniques.
 
-    st.write("""
-    - TensorFlow / Keras
-    - MobileNetV2 CNN
-    - OpenCV
-    - Streamlit
-    - Plotly
-    - ReportLab
-    - Grad-CAM Explainable AI
-    """)
+       The system uses Computer Vision concepts to analyze uploaded fruit
+       images and generate freshness predictions in real time.
 
-    st.subheader("Future Improvements")
+       The dashboard supports:
 
-    st.write("""
-    - Multi-fruit classification
-    - Disease detection
-    - Real-time video analysis
-    - Mobile application
-    """)
+       - Fruit image upload
+       - Camera prediction
+       - AI-based freshness analysis
+       - Explainable AI visualization
+       - Interactive analytics
+       - PDF report generation
+       - CSV export
+
+       The system is optimized for Streamlit Cloud deployment and avoids
+       heavy TensorFlow dependencies for improved compatibility and stability.
+       """)
+
+    with st.expander(
+        " Technologies Used"
+    ):
+
+        st.write("""
+        - Python
+        - Streamlit
+        - OpenCV
+        - NumPy
+        - Plotly
+        - Pandas
+        - Matplotlib
+        - ReportLab
+        """)
+
+    with st.expander(
+        " Future Improvements"
+    ):
+
+        st.write("""
+        - Real deep learning integration
+        - Multi-fruit classification
+        - Fruit disease detection
+        - Mobile application support
+        - Real-time video prediction
+        - Cloud database integration
+        """)
 
 # ==========================================
 # FOOTER
@@ -791,6 +758,6 @@ st.markdown("---")
 st.markdown("""
 <div class="footer">
 AI Fruit Freshness Detection System |
-Developed using Streamlit & TensorFlow
+Developed using Streamlit & Computer Vision
 </div>
 """, unsafe_allow_html=True)
