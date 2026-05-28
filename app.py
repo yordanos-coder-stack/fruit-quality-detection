@@ -138,6 +138,11 @@ def preprocess_image(image):
 
     img = np.array(image)
 
+    img = cv2.cvtColor(
+        img,
+        cv2.COLOR_RGB2BGR
+    )
+
     img = cv2.resize(
         img,
         (IMG_SIZE, IMG_SIZE)
@@ -155,27 +160,68 @@ def preprocess_image(image):
 # ==========================================
 # SAFE AI PREDICTION
 # ==========================================
+# IMPROVED SAFE AI PREDICTION
+# ==========================================
 def safe_predict(image):
 
-    img_array = np.array(image)
+    img = np.array(image)
 
-    mean_color = np.mean(img_array)
+    # Resize for stability
+    img = cv2.resize(img, (128, 128))
 
-    dark_pixels = np.sum(img_array < 80)
+    # Convert RGB to HSV
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
 
-    texture_score = np.std(img_array)
+    # --------------------------------------
+    # FEATURE 1: Brightness
+    # --------------------------------------
+    brightness = np.mean(hsv[:, :, 2])
 
-    score = (
-        (255 - mean_color) * 0.4 +
-        texture_score * 0.4 +
-        dark_pixels * 0.00005
+    # --------------------------------------
+    # FEATURE 2: Saturation
+    # --------------------------------------
+    saturation = np.mean(hsv[:, :, 1])
+
+    # --------------------------------------
+    # FEATURE 3: Dark Rotten Area
+    # --------------------------------------
+    dark_mask = hsv[:, :, 2] < 60
+
+    dark_ratio = np.sum(dark_mask) / dark_mask.size
+
+    # --------------------------------------
+    # FEATURE 4: Brown Rotten Spots
+    # --------------------------------------
+    brown_mask = (
+        (hsv[:, :, 0] > 5) &
+        (hsv[:, :, 0] < 25) &
+        (hsv[:, :, 1] > 50)
     )
 
-    score = np.clip(score / 100, 0, 1)
+    brown_ratio = np.sum(brown_mask) / brown_mask.size
 
-    rotten_prob = float(score)
+    # --------------------------------------
+    # FEATURE 5: Texture
+    # --------------------------------------
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
-    fresh_prob = 1 - rotten_prob
+    texture = np.std(gray)
+
+    # --------------------------------------
+    # FRESH SCORE
+    # --------------------------------------
+    fresh_score = (
+        (brightness / 255) * 0.35 +
+        (saturation / 255) * 0.25 +
+        (1 - dark_ratio) * 0.20 +
+        (1 - brown_ratio) * 0.15 +
+        (1 - (texture / 100)) * 0.05
+    )
+
+    fresh_score = np.clip(fresh_score, 0, 1)
+
+    rotten_prob = 1 - fresh_score
+    fresh_prob = fresh_score
 
     return rotten_prob, fresh_prob
 
