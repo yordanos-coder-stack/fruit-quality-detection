@@ -1,4 +1,5 @@
 import streamlit as st
+import tensorflow as tf
 from PIL import Image
 import numpy as np
 import cv2
@@ -7,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+
 from datetime import datetime
 from io import BytesIO
 
@@ -25,14 +27,11 @@ st.set_page_config(
 )
 
 # ==========================================
-# CUSTOM CSS (UI IMPROVEMENT)
+# CUSTOM UI STYLE
 # ==========================================
 st.markdown("""
 <style>
-
-.main {
-    background: linear-gradient(to right, #f8f9fa, #e9ecef);
-}
+.main {background: linear-gradient(to right, #f8f9fa, #e9ecef);}
 
 .hero {
     padding: 30px;
@@ -55,20 +54,20 @@ st.markdown("""
     background-color: #d4edda;
     padding: 20px;
     border-radius: 15px;
-    text-align: center;
-    font-size: 30px;
+    font-size: 28px;
     font-weight: bold;
     color: #155724;
+    text-align: center;
 }
 
 .prediction-bad {
     background-color: #f8d7da;
     padding: 20px;
     border-radius: 15px;
-    text-align: center;
-    font-size: 30px;
+    font-size: 28px;
     font-weight: bold;
     color: #721c24;
+    text-align: center;
 }
 
 .footer {
@@ -76,7 +75,6 @@ st.markdown("""
     padding: 15px;
     color: gray;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -103,60 +101,92 @@ page = st.sidebar.radio(
 
 confidence_threshold = st.sidebar.slider(
     "Confidence Threshold",
-    0.0,
-    1.0,
-    0.5,
-    0.01
+    0.0, 1.0, 0.5, 0.01
 )
 
 st.sidebar.success("AI System Ready")
 
 # ==========================================
-# IMAGE PREPROCESSING (CNN INPUT PIPELINE)
+# LOAD MODEL (SAFE CHECK)
+# ==========================================
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model(MODEL_PATH)
+
+if not os.path.exists(MODEL_PATH):
+    st.error("Model file not found. Please add 'fruit_detection_model.h5'")
+    st.stop()
+
+model = load_model()
+
+# ==========================================
+# IMAGE PREPROCESSING
 # ==========================================
 def preprocess_image(image):
     img = np.array(image)
-
-    # Convert and resize image for CNN input
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
-
-    # Normalize
     img = img.astype("float32") / 255.0
-
-    # Expand dimension for model input
     return np.expand_dims(img, axis=0)
 
 # ==========================================
-# PDF REPORT GENERATION
+# GRAD-CAM (MORE STABLE VERSION)
+# ==========================================
+def make_gradcam_heatmap(img_array, model, last_conv_layer_name="Conv_1"):
+
+    try:
+        base_model = model.layers[1]
+        last_conv_layer = base_model.get_layer(last_conv_layer_name)
+
+        grad_model = tf.keras.Model(
+            [model.inputs],
+            [last_conv_layer.output, model.output]
+        )
+
+        with tf.GradientTape() as tape:
+            conv_outputs, predictions = grad_model(img_array)
+            loss = predictions[:, 0]
+
+        grads = tape.gradient(loss, conv_outputs)
+        pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+        conv_outputs = conv_outputs[0]
+        heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+        heatmap = tf.squeeze(heatmap)
+
+        heatmap = tf.maximum(heatmap, 0) / (tf.math.reduce_max(heatmap) + 1e-8)
+
+        return heatmap.numpy()
+
+    except:
+        return None
+
+# ==========================================
+# PDF REPORT
 # ==========================================
 def generate_pdf(label, confidence):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
 
-    elements = []
-
-    elements.append(Paragraph("AI Fruit Freshness Detection Report", styles['Title']))
-    elements.append(Spacer(1, 20))
-
-    elements.append(Paragraph(f"<b>Prediction Result:</b> {label}", styles['BodyText']))
-    elements.append(Spacer(1, 10))
-
-    elements.append(Paragraph(f"<b>Model Confidence:</b> {confidence:.2f}%", styles['BodyText']))
-    elements.append(Spacer(1, 10))
-
-    elements.append(Paragraph(
-        "This report is generated using a MobileNetV2-based deep learning model for fruit freshness classification.",
-        styles['BodyText']
-    ))
+    elements = [
+        Paragraph("Fruit Freshness Prediction Report", styles['Title']),
+        Spacer(1, 20),
+        Paragraph(f"<b>Prediction:</b> {label}", styles['BodyText']),
+        Spacer(1, 10),
+        Paragraph(f"<b>Confidence:</b> {confidence:.2f}%", styles['BodyText']),
+        Spacer(1, 10),
+        Paragraph(
+            "Generated using AI system based on MobileNetV2 + Explainable AI",
+            styles['BodyText']
+        )
+    ]
 
     doc.build(elements)
     buffer.seek(0)
     return buffer
 
 # ==========================================
-# HOME PAGE (PROJECT OVERVIEW)
+# HOME PAGE (IMPROVED RESEARCH STYLE)
 # ==========================================
 if page == "🏠 Home":
 
@@ -169,44 +199,25 @@ if page == "🏠 Home":
 
     col1, col2, col3 = st.columns(3)
 
-    with col1:
-        st.markdown("""
-        <div class="metric-card">
-            <h2>AI Model</h2>
-            <h3>MobileNetV2 CNN</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("""
-        <div class="metric-card">
-            <h2>Task</h2>
-            <h3>Fruit Classification</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown("""
-        <div class="metric-card">
-            <h2>Output</h2>
-            <h3>Fresh / Rotten</h3>
-        </div>
-        """, unsafe_allow_html=True)
+    col1.metric("Model", "MobileNetV2 CNN")
+    col2.metric("Task", "Fresh vs Rotten Classification")
+    col3.metric("Output", "Image-Based Prediction")
 
     st.markdown("---")
 
     st.write("""
 ### System Overview
-This system uses a deep learning model (MobileNetV2) to classify fruit images as Fresh or Rotten.  
-It applies computer vision preprocessing and provides real-time prediction through a Streamlit web interface.
+This system applies deep learning (MobileNetV2) for automatic fruit freshness detection.
 
-Key capabilities:
-- Image-based fruit quality detection
-- Real-time classification
-- Confidence scoring
-- Explainable AI (Grad-CAM)
+It processes fruit images using computer vision preprocessing, then predicts whether the fruit is fresh or rotten.
+
+Key capabilities include:
+- Deep learning-based image classification
+- Real-time prediction
+- Confidence score estimation
+- Explainable AI (Grad-CAM visualization)
 - PDF report generation
-- Interactive analytics dashboard
+- Prediction history analytics
     """)
 
 # ==========================================
@@ -221,54 +232,41 @@ elif page == " Prediction":
     if uploaded_file:
 
         image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Input Image", use_container_width=True)
 
         processed = preprocess_image(image)
 
-        # =========================
-        # SIMULATED PREDICTION LOGIC (placeholder for model)
-        # =========================
-        rotten_prob = float(np.random.uniform(0.1, 0.9))
+        prediction = model.predict(processed)
+
+        # SAFE OUTPUT HANDLING
+        rotten_prob = float(prediction[0][0])
         fresh_prob = 1 - rotten_prob
 
-        if rotten_prob > confidence_threshold:
-            label = "Rotten"
-            confidence = rotten_prob * 100
-            st.error(f"Prediction: {label}")
+        label = "Rotten" if rotten_prob > confidence_threshold else "Fresh"
+        confidence = max(rotten_prob, fresh_prob) * 100
+
+        if label == "Rotten":
+            st.markdown(f"<div class='prediction-bad'>{label}</div>", unsafe_allow_html=True)
         else:
-            label = "Fresh"
-            confidence = fresh_prob * 100
-            st.success(f"Prediction: {label}")
+            st.markdown(f"<div class='prediction-good'>{label}</div>", unsafe_allow_html=True)
 
         st.progress(int(confidence))
         st.write(f"Confidence: {confidence:.2f}%")
 
-        # ==========================================
-        # VISUALIZATION
-        # ==========================================
+        # CHART
         df = pd.DataFrame({
             "Class": ["Fresh", "Rotten"],
             "Probability": [fresh_prob * 100, rotten_prob * 100]
         })
 
-        fig = px.bar(df, x="Class", y="Probability", text="Probability",
-                     title="Prediction Probability Distribution")
+        fig = px.bar(df, x="Class", y="Probability", text="Probability")
         st.plotly_chart(fig, use_container_width=True)
 
-        # ==========================================
-        # PDF REPORT
-        # ==========================================
+        # PDF
         pdf = generate_pdf(label, confidence)
+        st.download_button("Download PDF Report", pdf, file_name="report.pdf")
 
-        st.download_button(
-            "Download PDF Report",
-            pdf,
-            file_name="fruit_freshness_report.pdf"
-        )
-
-        # ==========================================
-        # HISTORY STORAGE
-        # ==========================================
+        # HISTORY
         if "history" not in st.session_state:
             st.session_state.history = []
 
@@ -279,7 +277,7 @@ elif page == " Prediction":
         })
 
 # ==========================================
-# ANALYTICS PAGE
+# ANALYTICS
 # ==========================================
 elif page == " Analytics":
 
@@ -288,72 +286,36 @@ elif page == " Analytics":
     if "history" in st.session_state:
 
         df = pd.DataFrame(st.session_state.history)
-
         st.dataframe(df)
 
-        fig1 = px.pie(df, names="Prediction", title="Prediction Distribution")
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(px.pie(df, names="Prediction", title="Distribution"), use_container_width=True)
 
-        fig2 = px.line(df, x="Time", y="Confidence",
-                       color="Prediction",
-                       markers=True,
-                       title="Confidence Trend Over Time")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(
+            px.line(df, x="Time", y="Confidence", color="Prediction"),
+            use_container_width=True
+        )
 
     else:
-        st.info("No prediction history available yet.")
+        st.info("No prediction history available.")
 
 # ==========================================
-# ABOUT PAGE (FULL PROJECT DESCRIPTION UPDATED)
+# ABOUT
 # ==========================================
 elif page == " About":
 
     st.title("About This AI System")
 
-    with st.expander("Project Description"):
+    st.write("""
+This project is an AI-powered fruit freshness detection system built using:
 
-        st.write("""
-This project is an AI-powered Fruit Freshness Classification System developed using Deep Learning and the MobileNetV2 architecture.
+- MobileNetV2 deep learning model
+- Computer vision preprocessing
+- Streamlit web deployment
+- Explainable AI (Grad-CAM)
+- Interactive visualization tools
 
-The system is designed to automatically classify fruit images into two categories: Fresh or Rotten. It uses Artificial Intelligence (AI) and Computer Vision techniques to extract meaningful features from images and perform accurate classification.
-
-At the core of the system is MobileNetV2, a lightweight Convolutional Neural Network (CNN) that provides high accuracy while maintaining computational efficiency. This makes the system suitable for real-time applications.
-
-The model learns important visual patterns such as:
-- Color changes in fruits
-- Texture variations
-- Mold and decay detection
-- Surface damage
-- Shape abnormalities
-
-When a user uploads an image, the system performs preprocessing steps including resizing, normalization, and conversion into a model-ready format. The processed image is then passed to the trained model to predict the fruit’s freshness level.
-
-The system also outputs a confidence score indicating how certain the model is about its prediction.
-
-To improve transparency, Explainable AI techniques such as Grad-CAM can be integrated to highlight the image regions influencing the prediction.
-
-The system is deployed using Streamlit, providing a user-friendly web interface for real-time interaction, visualization, and reporting.
-        """)
-
-    with st.expander("Technologies Used"):
-        st.write("""
-- Python
-- TensorFlow / Keras
-- MobileNetV2 CNN
-- OpenCV
-- Streamlit
-- Plotly
-- ReportLab
-        """)
-
-    with st.expander("Future Improvements"):
-        st.write("""
-- Multi-fruit classification system
-- Disease detection in fruits
-- Real-time video analysis
-- Mobile application integration
-- Improved dataset training for higher accuracy
-        """)
+The system classifies fruit images into Fresh or Rotten categories and provides confidence scores and analytical insights.
+""")
 
 # ==========================================
 # FOOTER
@@ -362,6 +324,6 @@ st.markdown("---")
 
 st.markdown("""
 <div class="footer">
-AI Fruit Freshness Detection System | Built with Deep Learning & Streamlit
+AI Fruit Freshness Detection System | Deep Learning + Explainable AI
 </div>
 """, unsafe_allow_html=True)
