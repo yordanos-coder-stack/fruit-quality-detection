@@ -550,7 +550,7 @@ elif page == " Prediction":
                     " Explainable AI Visualization"
                 )
 
-                heatmap_img = generate_heatmap(image)
+            heatmap_img = generate_heatmap(image)
 
                 fig, ax = plt.subplots(
                     figsize=(6,6)
@@ -575,7 +575,7 @@ elif page == " Prediction":
                 # ==========================================
                 # DOWNLOAD CSV
                 # ==========================================
-                result_df = pd.DataFrame({
+            result_df = pd.DataFrame({
                     "Prediction": [label],
                     "Confidence": [
                         f"{confidence:.2f}%"
@@ -586,7 +586,7 @@ elif page == " Prediction":
                     index=False
                 ).encode('utf-8')
 
-                st.download_button(
+            st.download_button(
                     label=" Download CSV Result",
                     data=csv,
                     file_name="prediction_result.csv",
@@ -601,7 +601,7 @@ elif page == " Prediction":
                     confidence
                 )
 
-                st.download_button(
+            st.download_button(
                     label=" Download PDF Report",
                     data=pdf_file,
                     file_name="fruit_prediction_report.pdf",
