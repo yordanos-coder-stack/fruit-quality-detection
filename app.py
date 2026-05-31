@@ -489,7 +489,7 @@ elif page == " Prediction":
                     int(confidence)
                 )
 
-                st.write(
+            st.write(
                     f"### Confidence: {confidence:.2f}%"
                 )
 
