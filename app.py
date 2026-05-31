@@ -17,7 +17,6 @@ from reportlab.platypus import (
     Spacer
 )
 from reportlab.lib.styles import getSampleStyleSheet
-from tensorflow.keras.models import load_model
 
 # ==========================================
 # PAGE CONFIG
@@ -97,14 +96,6 @@ st.markdown("""
 # CONSTANTS
 # ==========================================
 IMG_SIZE = 128
-# ==========================================
-# LOAD TRAINED MODEL
-# ==========================================
-@st.cache_resource
-def load_fruit_model():
-    return load_model("fruit_freshness_model.h5")
-
-model = load_fruit_model()
 
 # ==========================================
 # SIDEBAR
@@ -166,20 +157,73 @@ def preprocess_image(image):
 
     return img
 
-def predict_fruit(image):
+# ==========================================
+# SAFE AI PREDICTION
+# ==========================================
+# IMPROVED SAFE AI PREDICTION
+# ==========================================
+def safe_predict(image):
 
-    processed = preprocess_image(image)
+    img = np.array(image)
 
-    prediction = model.predict(
-        processed,
-        verbose=0
+    # Resize for stability
+    img = cv2.resize(img, (128, 128))
+
+    # Convert RGB to HSV
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+
+    # --------------------------------------
+    # FEATURE 1: Brightness
+    # --------------------------------------
+    brightness = np.mean(hsv[:, :, 2])
+
+    # --------------------------------------
+    # FEATURE 2: Saturation
+    # --------------------------------------
+    saturation = np.mean(hsv[:, :, 1])
+
+    # --------------------------------------
+    # FEATURE 3: Dark Rotten Area
+    # --------------------------------------
+    dark_mask = hsv[:, :, 2] < 60
+
+    dark_ratio = np.sum(dark_mask) / dark_mask.size
+
+    # --------------------------------------
+    # FEATURE 4: Brown Rotten Spots
+    # --------------------------------------
+    brown_mask = (
+        (hsv[:, :, 0] > 5) &
+        (hsv[:, :, 0] < 25) &
+        (hsv[:, :, 1] > 50)
     )
 
-    probability = float(
-        prediction[0][0]
+    brown_ratio = np.sum(brown_mask) / brown_mask.size
+
+    # --------------------------------------
+    # FEATURE 5: Texture
+    # --------------------------------------
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    texture = np.std(gray)
+
+    # --------------------------------------
+    # FRESH SCORE
+    # --------------------------------------
+    fresh_score = (
+        (brightness / 255) * 0.35 +
+        (saturation / 255) * 0.25 +
+        (1 - dark_ratio) * 0.20 +
+        (1 - brown_ratio) * 0.15 +
+        (1 - (texture / 100)) * 0.05
     )
 
-    return probability
+    fresh_score = np.clip(fresh_score, 0, 1)
+
+    rotten_prob = 1 - fresh_score
+    fresh_prob = fresh_score
+
+    return rotten_prob, fresh_prob
 
 # ==========================================
 # SAFE GRAD-CAM STYLE VISUALIZATION
@@ -451,17 +495,14 @@ elif page == " Prediction":
                 "Analyzing Fruit Quality..."
             ):
 
-               probability = predict_fruit(image)
+                processed = preprocess_image(image)
 
-               # if training labels are:
-               # {'fresh':0,'rotten':1}
+                rotten_prob, fresh_prob = safe_predict(image)
 
-               rotten_prob = probability
-               fresh_prob = 1 - probability
                 # ==========================================
                 # CLASSIFICATION
                 # ==========================================
-            if rotten_prob > confidence_threshold:
+                if rotten_prob > confidence_threshold:
 
                     label = "Rotten"
 
@@ -473,7 +514,7 @@ elif page == " Prediction":
                     </div>
                     """, unsafe_allow_html=True)
 
-            else:
+                else:
 
                     label = "Fresh"
 
@@ -485,18 +526,18 @@ elif page == " Prediction":
                     </div>
                     """, unsafe_allow_html=True)
 
-            st.progress(
+                st.progress(
                     int(confidence)
                 )
 
-            st.write(
+                st.write(
                     f"### Confidence: {confidence:.2f}%"
                 )
 
                 # ==========================================
                 # GAUGE CHART
                 # ==========================================
-            gauge = go.Figure(
+                gauge = go.Figure(
                     go.Indicator(
                         mode="gauge+number",
                         value=confidence,
@@ -511,7 +552,7 @@ elif page == " Prediction":
                     )
                 )
 
-            st.plotly_chart(
+                st.plotly_chart(
                     gauge,
                     use_container_width=True
                 )
@@ -519,7 +560,7 @@ elif page == " Prediction":
                 # ==========================================
                 # BAR CHART
                 # ==========================================
-            prob_df = pd.DataFrame({
+                prob_df = pd.DataFrame({
                     "Class": [
                         "Fresh",
                         "Rotten"
@@ -530,7 +571,7 @@ elif page == " Prediction":
                     ]
                 })
 
-            bar_fig = px.bar(
+                bar_fig = px.bar(
                     prob_df,
                     x="Class",
                     y="Probability",
@@ -538,7 +579,7 @@ elif page == " Prediction":
                     title="Prediction Probabilities"
                 )
 
-            st.plotly_chart(
+                st.plotly_chart(
                     bar_fig,
                     use_container_width=True
                 )
@@ -546,28 +587,28 @@ elif page == " Prediction":
                 # ==========================================
                 # EXPLAINABLE AI
                 # ==========================================
-            st.subheader(
+                st.subheader(
                     " Explainable AI Visualization"
                 )
 
-            heatmap_img = generate_heatmap(image)
+                heatmap_img = generate_heatmap(image)
 
-            fig, ax = plt.subplots(
+                fig, ax = plt.subplots(
                     figsize=(6,6)
                 )
 
-            ax.imshow(
+                ax.imshow(
                     cv2.cvtColor(
                         heatmap_img,
                         cv2.COLOR_BGR2RGB
                     )
                 )
 
-            ax.axis("off")
+                ax.axis("off")
 
-            st.pyplot(fig)
+                st.pyplot(fig)
 
-            st.info("""
+                st.info("""
                 The highlighted regions indicate areas that strongly influenced
                 the prediction result.
                 """)
@@ -575,18 +616,18 @@ elif page == " Prediction":
                 # ==========================================
                 # DOWNLOAD CSV
                 # ==========================================
-            result_df = pd.DataFrame({
+                result_df = pd.DataFrame({
                     "Prediction": [label],
                     "Confidence": [
                         f"{confidence:.2f}%"
                     ]
                 })
 
-            csv = result_df.to_csv(
+                csv = result_df.to_csv(
                     index=False
                 ).encode('utf-8')
 
-            st.download_button(
+                st.download_button(
                     label=" Download CSV Result",
                     data=csv,
                     file_name="prediction_result.csv",
@@ -596,12 +637,12 @@ elif page == " Prediction":
                 # ==========================================
                 # DOWNLOAD PDF
                 # ==========================================
-            pdf_file = generate_pdf(
+                pdf_file = generate_pdf(
                     label,
                     confidence
                 )
 
-            st.download_button(
+                st.download_button(
                     label=" Download PDF Report",
                     data=pdf_file,
                     file_name="fruit_prediction_report.pdf",
@@ -611,7 +652,7 @@ elif page == " Prediction":
                 # ==========================================
                 # SAVE HISTORY
                 # ==========================================
-            history = {
+                history = {
                     "Time": datetime.now(),
                     "Prediction": label,
                     "Confidence": round(
@@ -620,11 +661,11 @@ elif page == " Prediction":
                     )
                 }
 
-            if "prediction_history" not in st.session_state:
+                if "prediction_history" not in st.session_state:
 
                     st.session_state.prediction_history = []
 
-            st.session_state.prediction_history.append(
+                st.session_state.prediction_history.append(
                     history
                 )
 
