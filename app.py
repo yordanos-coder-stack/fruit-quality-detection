@@ -556,7 +556,7 @@ elif page == " Prediction":
                     figsize=(6,6)
                 )
 
-                ax.imshow(
+            ax.imshow(
                     cv2.cvtColor(
                         heatmap_img,
                         cv2.COLOR_BGR2RGB
