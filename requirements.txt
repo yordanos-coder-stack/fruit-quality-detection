@@ -1,9 +1,8 @@
-streamlit==1.32.0
-numpy==1.24.4
-pandas==2.0.3
-pillow
+streamlit
+numpy
+pandas
 opencv-python-headless
 plotly
 matplotlib
 reportlab
-tensorflow-cpu==2.13.0
+pillow
