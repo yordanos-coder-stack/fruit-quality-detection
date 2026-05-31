@@ -563,11 +563,11 @@ elif page == " Prediction":
                     )
                 )
 
-                ax.axis("off")
+            ax.axis("off")
 
-                st.pyplot(fig)
+            st.pyplot(fig)
 
-                st.info("""
+            st.info("""
                 The highlighted regions indicate areas that strongly influenced
                 the prediction result.
                 """)
@@ -582,7 +582,7 @@ elif page == " Prediction":
                     ]
                 })
 
-                csv = result_df.to_csv(
+            csv = result_df.to_csv(
                     index=False
                 ).encode('utf-8')
 
@@ -596,7 +596,7 @@ elif page == " Prediction":
                 # ==========================================
                 # DOWNLOAD PDF
                 # ==========================================
-                pdf_file = generate_pdf(
+            pdf_file = generate_pdf(
                     label,
                     confidence
                 )
@@ -611,7 +611,7 @@ elif page == " Prediction":
                 # ==========================================
                 # SAVE HISTORY
                 # ==========================================
-                history = {
+            history = {
                     "Time": datetime.now(),
                     "Prediction": label,
                     "Confidence": round(
@@ -620,7 +620,7 @@ elif page == " Prediction":
                     )
                 }
 
-                if "prediction_history" not in st.session_state:
+            if "prediction_history" not in st.session_state:
 
                     st.session_state.prediction_history = []
 
