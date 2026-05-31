@@ -17,6 +17,7 @@ from reportlab.platypus import (
     Spacer
 )
 from reportlab.lib.styles import getSampleStyleSheet
+from tensorflow.keras.models import load_model
 
 # ==========================================
 # PAGE CONFIG
@@ -96,6 +97,14 @@ st.markdown("""
 # CONSTANTS
 # ==========================================
 IMG_SIZE = 128
+# ==========================================
+# LOAD TRAINED MODEL
+# ==========================================
+@st.cache_resource
+def load_fruit_model():
+    return load_model("fruit_freshness_model.h5")
+
+model = load_fruit_model()
 
 # ==========================================
 # SIDEBAR
@@ -157,73 +166,20 @@ def preprocess_image(image):
 
     return img
 
-# ==========================================
-# SAFE AI PREDICTION
-# ==========================================
-# IMPROVED SAFE AI PREDICTION
-# ==========================================
-def safe_predict(image):
+def predict_fruit(image):
 
-    img = np.array(image)
+    processed = preprocess_image(image)
 
-    # Resize for stability
-    img = cv2.resize(img, (128, 128))
-
-    # Convert RGB to HSV
-    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-
-    # --------------------------------------
-    # FEATURE 1: Brightness
-    # --------------------------------------
-    brightness = np.mean(hsv[:, :, 2])
-
-    # --------------------------------------
-    # FEATURE 2: Saturation
-    # --------------------------------------
-    saturation = np.mean(hsv[:, :, 1])
-
-    # --------------------------------------
-    # FEATURE 3: Dark Rotten Area
-    # --------------------------------------
-    dark_mask = hsv[:, :, 2] < 60
-
-    dark_ratio = np.sum(dark_mask) / dark_mask.size
-
-    # --------------------------------------
-    # FEATURE 4: Brown Rotten Spots
-    # --------------------------------------
-    brown_mask = (
-        (hsv[:, :, 0] > 5) &
-        (hsv[:, :, 0] < 25) &
-        (hsv[:, :, 1] > 50)
+    prediction = model.predict(
+        processed,
+        verbose=0
     )
 
-    brown_ratio = np.sum(brown_mask) / brown_mask.size
-
-    # --------------------------------------
-    # FEATURE 5: Texture
-    # --------------------------------------
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-    texture = np.std(gray)
-
-    # --------------------------------------
-    # FRESH SCORE
-    # --------------------------------------
-    fresh_score = (
-        (brightness / 255) * 0.35 +
-        (saturation / 255) * 0.25 +
-        (1 - dark_ratio) * 0.20 +
-        (1 - brown_ratio) * 0.15 +
-        (1 - (texture / 100)) * 0.05
+    probability = float(
+        prediction[0][0]
     )
 
-    fresh_score = np.clip(fresh_score, 0, 1)
-
-    rotten_prob = 1 - fresh_score
-    fresh_prob = fresh_score
-
-    return rotten_prob, fresh_prob
+    return probability
 
 # ==========================================
 # SAFE GRAD-CAM STYLE VISUALIZATION
@@ -495,10 +451,13 @@ elif page == " Prediction":
                 "Analyzing Fruit Quality..."
             ):
 
-                processed = preprocess_image(image)
+               probability = predict_fruit(image)
 
-                rotten_prob, fresh_prob = safe_predict(image)
+               # if training labels are:
+               # {'fresh':0,'rotten':1}
 
+                rotten_prob = probability
+                fresh_prob = 1 - probability
                 # ==========================================
                 # CLASSIFICATION
                 # ==========================================
