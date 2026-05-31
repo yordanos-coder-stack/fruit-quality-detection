@@ -530,7 +530,7 @@ elif page == " Prediction":
                     ]
                 })
 
-                bar_fig = px.bar(
+             bar_fig = px.bar(
                     prob_df,
                     x="Class",
                     y="Probability",
