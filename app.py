@@ -552,7 +552,7 @@ elif page == " Prediction":
 
             heatmap_img = generate_heatmap(image)
 
-                fig, ax = plt.subplots(
+            fig, ax = plt.subplots(
                     figsize=(6,6)
                 )
 
