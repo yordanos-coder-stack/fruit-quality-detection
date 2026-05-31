@@ -511,7 +511,7 @@ elif page == " Prediction":
                     )
                 )
 
-                st.plotly_chart(
+            st.plotly_chart(
                     gauge,
                     use_container_width=True
                 )
