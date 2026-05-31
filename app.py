@@ -461,7 +461,7 @@ elif page == " Prediction":
                 # ==========================================
                 # CLASSIFICATION
                 # ==========================================
-                if rotten_prob > confidence_threshold:
+              if rotten_prob > confidence_threshold:
 
                     label = "Rotten"
 
