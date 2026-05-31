@@ -456,8 +456,8 @@ elif page == " Prediction":
                # if training labels are:
                # {'fresh':0,'rotten':1}
 
-                    rotten_prob = probability
-                    fresh_prob = 1 - probability
+             rotten_prob = probability
+             fresh_prob = 1 - probability
                 # ==========================================
                 # CLASSIFICATION
                 # ==========================================
