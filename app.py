@@ -624,7 +624,7 @@ elif page == " Prediction":
 
                     st.session_state.prediction_history = []
 
-                st.session_state.prediction_history.append(
+            st.session_state.prediction_history.append(
                     history
                 )
 
