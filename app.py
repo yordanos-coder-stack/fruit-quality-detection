@@ -519,7 +519,7 @@ elif page == " Prediction":
                 # ==========================================
                 # BAR CHART
                 # ==========================================
-                prob_df = pd.DataFrame({
+            prob_df = pd.DataFrame({
                     "Class": [
                         "Fresh",
                         "Rotten"
