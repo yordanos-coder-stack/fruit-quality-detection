@@ -485,7 +485,7 @@ elif page == " Prediction":
                     </div>
                     """, unsafe_allow_html=True)
 
-                st.progress(
+            st.progress(
                     int(confidence)
                 )
 
