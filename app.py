@@ -538,7 +538,7 @@ elif page == " Prediction":
                     title="Prediction Probabilities"
                 )
 
-                st.plotly_chart(
+            st.plotly_chart(
                     bar_fig,
                     use_container_width=True
                 )
