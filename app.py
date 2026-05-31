@@ -496,7 +496,7 @@ elif page == " Prediction":
                 # ==========================================
                 # GAUGE CHART
                 # ==========================================
-             gauge = go.Figure(
+            gauge = go.Figure(
                     go.Indicator(
                         mode="gauge+number",
                         value=confidence,
