@@ -473,7 +473,7 @@ elif page == " Prediction":
                     </div>
                     """, unsafe_allow_html=True)
 
-                else:
+            else:
 
                     label = "Fresh"
 
