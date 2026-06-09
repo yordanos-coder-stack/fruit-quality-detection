@@ -1,9 +1,10 @@
 streamlit
+tensorflow
+opencv-python-headless
 numpy
 pandas
-pillow
-opencv-python-headless
 plotly
 matplotlib
+Pillow
 reportlab
-tensorflow==2.15.0
+joblib
