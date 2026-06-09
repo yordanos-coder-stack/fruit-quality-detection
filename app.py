@@ -332,7 +332,7 @@ if page == "🏠 Home":
         st.markdown("""
         <div class="metric-card">
             <h2>Accuracy</h2>
-            <h3>98%</h3>
+            <h3>97%</h3>
         </div>
         """, unsafe_allow_html=True)
 
