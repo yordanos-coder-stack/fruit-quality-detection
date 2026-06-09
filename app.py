@@ -1,4 +1,6 @@
+import joblib
 import streamlit as st
+import tensorflow as tf
 from PIL import Image
 import numpy as np
 import cv2
@@ -7,9 +9,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+
 from datetime import datetime
 from io import BytesIO
 
+# PDF REPORT
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import (
     SimpleDocTemplate,
@@ -81,14 +85,6 @@ st.markdown("""
     color: gray;
 }
 
-.small-card {
-    background: white;
-    padding: 15px;
-    border-radius: 15px;
-    box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
-    margin-bottom: 10px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -96,13 +92,14 @@ st.markdown("""
 # CONSTANTS
 # ==========================================
 IMG_SIZE = 128
+MODEL_PATH = "fruit_detection_model.h5"
 
 # ==========================================
 # SIDEBAR
 # ==========================================
 st.sidebar.image(
     "https://felixinstruments.com/app/uploads/2023/07/F-940-Fruit-Respiration.png.webp",
-    width=300
+    width=350
 )
 
 st.sidebar.title("Navigation")
@@ -132,6 +129,19 @@ st.sidebar.markdown("---")
 st.sidebar.success("System Ready")
 
 # ==========================================
+# LOAD MODEL
+# ==========================================
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model(MODEL_PATH)
+
+if not os.path.exists(MODEL_PATH):
+    st.error("Model file not found.")
+    st.stop()
+
+model = load_model()
+
+# ==========================================
 # PREPROCESS IMAGE
 # ==========================================
 def preprocess_image(image):
@@ -158,99 +168,96 @@ def preprocess_image(image):
     return img
 
 # ==========================================
-# SAFE AI PREDICTION
+# FIXED GRAD-CAM FUNCTION
 # ==========================================
-# IMPROVED SAFE AI PREDICTION
-# ==========================================
-def safe_predict(image):
+def make_gradcam_heatmap(
+    img_array,
+    model,
+    last_conv_layer_name="Conv_1"
+):
 
-    img = np.array(image)
+    # MobileNetV2 base model
+    base_model = model.layers[1]
 
-    # Resize for stability
-    img = cv2.resize(img, (128, 128))
-
-    # Convert RGB to HSV
-    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-
-    # --------------------------------------
-    # FEATURE 1: Brightness
-    # --------------------------------------
-    brightness = np.mean(hsv[:, :, 2])
-
-    # --------------------------------------
-    # FEATURE 2: Saturation
-    # --------------------------------------
-    saturation = np.mean(hsv[:, :, 1])
-
-    # --------------------------------------
-    # FEATURE 3: Dark Rotten Area
-    # --------------------------------------
-    dark_mask = hsv[:, :, 2] < 60
-
-    dark_ratio = np.sum(dark_mask) / dark_mask.size
-
-    # --------------------------------------
-    # FEATURE 4: Brown Rotten Spots
-    # --------------------------------------
-    brown_mask = (
-        (hsv[:, :, 0] > 5) &
-        (hsv[:, :, 0] < 25) &
-        (hsv[:, :, 1] > 50)
+    # Last conv layer
+    last_conv_layer = base_model.get_layer(
+        last_conv_layer_name
     )
 
-    brown_ratio = np.sum(brown_mask) / brown_mask.size
-
-    # --------------------------------------
-    # FEATURE 5: Texture
-    # --------------------------------------
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-    texture = np.std(gray)
-
-    # --------------------------------------
-    # FRESH SCORE
-    # --------------------------------------
-    fresh_score = (
-        (brightness / 255) * 0.35 +
-        (saturation / 255) * 0.25 +
-        (1 - dark_ratio) * 0.20 +
-        (1 - brown_ratio) * 0.15 +
-        (1 - (texture / 100)) * 0.05
+    # Conv model
+    last_conv_layer_model = tf.keras.Model(
+        base_model.inputs,
+        last_conv_layer.output
     )
 
-    fresh_score = np.clip(fresh_score, 0, 1)
-
-    rotten_prob = 1 - fresh_score
-    fresh_prob = fresh_score
-
-    return rotten_prob, fresh_prob
-
-# ==========================================
-# SAFE GRAD-CAM STYLE VISUALIZATION
-# ==========================================
-def generate_heatmap(image):
-
-    img = np.array(image)
-
-    gray = cv2.cvtColor(
-        img,
-        cv2.COLOR_RGB2GRAY
+    # Classifier model
+    classifier_input = tf.keras.Input(
+        shape=last_conv_layer.output.shape[1:]
     )
 
-    heatmap = cv2.applyColorMap(
-        gray,
-        cv2.COLORMAP_JET
+    x = classifier_input
+
+    # Add top classifier layers
+    classifier_layers = [
+        "global_average_pooling2d",
+        "dense_10",
+        "dropout_5",
+        "dense_11"
+    ]
+
+    for layer_name in classifier_layers:
+
+        try:
+
+            layer = model.get_layer(layer_name)
+
+            x = layer(x)
+
+        except:
+            pass
+
+    classifier_model = tf.keras.Model(
+        classifier_input,
+        x
     )
 
-    superimposed = cv2.addWeighted(
-        img,
-        0.6,
+    # Gradient computation
+    with tf.GradientTape() as tape:
+
+        conv_outputs = last_conv_layer_model(
+            img_array
+        )
+
+        tape.watch(conv_outputs)
+
+        predictions = classifier_model(
+            conv_outputs
+        )
+
+        loss = predictions[:, 0]
+
+    grads = tape.gradient(
+        loss,
+        conv_outputs
+    )
+
+    pooled_grads = tf.reduce_mean(
+        grads,
+        axis=(0, 1, 2)
+    )
+
+    conv_outputs = conv_outputs[0]
+
+    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+
+    heatmap = tf.squeeze(heatmap)
+
+    heatmap = tf.maximum(
         heatmap,
-        0.4,
         0
-    )
+    ) / tf.math.reduce_max(heatmap)
 
-    return superimposed
+    return heatmap.numpy()
 
 # ==========================================
 # PDF REPORT FUNCTION
@@ -287,24 +294,11 @@ def generate_pdf(label, confidence):
         styles['BodyText']
     )
 
-    description = Paragraph(
-        """
-        This report was generated by the deep learning model Fruit Freshness Detection System.
-        The system analyzes uploaded fruit images and predicts whether the fruit
-        is Fresh or Rotten using computer vision techniques.
-        """,
-        styles['BodyText']
-    )
-
     elements.append(prediction_text)
 
     elements.append(Spacer(1, 10))
 
     elements.append(confidence_text)
-
-    elements.append(Spacer(1, 20))
-
-    elements.append(description)
 
     doc.build(elements)
 
@@ -319,7 +313,7 @@ if page == "🏠 Home":
 
     st.markdown("""
     <div class="hero">
-        <h1>DL Model Fruit Freshness Detection System</h1>
+        <h1>AI Fruit Freshness Detection System</h1>
         <p>Deep Learning Powered Smart Fruit Quality Analysis</p>
     </div>
     """, unsafe_allow_html=True)
@@ -338,7 +332,7 @@ if page == "🏠 Home":
         st.markdown("""
         <div class="metric-card">
             <h2>Accuracy</h2>
-            <h3>97%</h3>
+            <h3>98%</h3>
         </div>
         """, unsafe_allow_html=True)
 
@@ -360,23 +354,14 @@ if page == "🏠 Home":
 
     with tab1:
 
-        st.markdown("""
-        ### Key Features
-
-        - Real-time fruit freshness prediction
-        - Explainable AI style heatmap visualization
-        - PDF report generation
-        - CSV result download
-        - Interactive analytics dashboard
-        - Camera image prediction
-        - Streamlit cloud compatible deployment
-        - Confidence score visualization
+        st.write("""
+          Real-time prediction  
+          Explainable AI (Grad-CAM)  
+          PDF report generation  
+          CSV download  
+          Interactive analytics  
+          Webcam prediction  
         """)
-
-        c1, c2 = st.columns(2)
-
-        with c1:
-            st.info("Supports image upload and live camera capture.")
 
     with tab2:
 
@@ -384,11 +369,11 @@ if page == "🏠 Home":
             "Step": [
                 "Upload Image",
                 "Preprocessing",
-                "AI Analysis",
-                "Heatmap Generation",
-                "Prediction Result"
+                "CNN Prediction",
+                "Grad-CAM",
+                "Final Result"
             ],
-            "Order": [1, 2, 3, 4, 5]
+            "Order": [1,2,3,4,5]
         })
 
         fig = px.line(
@@ -405,16 +390,6 @@ if page == "🏠 Home":
             use_container_width=True
         )
 
-        st.markdown("""
-        ### Workflow Description
-
-        1. User uploads a fruit image  
-        2. System preprocesses the image  
-        3. AI engine analyzes image quality  
-        4. Heatmap highlights important regions  
-        5. Final freshness prediction is generated  
-        """)
-
     with tab3:
 
         st.image(
@@ -424,10 +399,6 @@ if page == "🏠 Home":
             ],
             width=300
         )
-
-        st.write("""
-        Sample fresh and rotten fruit images used for demonstration.
-        """)
 
 # ==========================================
 # PREDICTION PAGE
@@ -495,16 +466,26 @@ elif page == " Prediction":
                 "Analyzing Fruit Quality..."
             ):
 
-                processed = preprocess_image(image)
+                processed = preprocess_image(
+                    image
+                )
 
-                rotten_prob, fresh_prob = safe_predict(image)
+                prediction = model.predict(
+                    processed
+                )
+
+                rotten_prob = float(
+                    prediction[0][0]
+                )
+
+                fresh_prob = 1 - rotten_prob
 
                 # ==========================================
                 # CLASSIFICATION
                 # ==========================================
                 if rotten_prob > confidence_threshold:
 
-                    label = "Rotten"
+                    label = "Rotten "
 
                     confidence = rotten_prob * 100
 
@@ -516,7 +497,7 @@ elif page == " Prediction":
 
                 else:
 
-                    label = "Fresh"
+                    label = "Fresh "
 
                     confidence = fresh_prob * 100
 
@@ -588,30 +569,68 @@ elif page == " Prediction":
                 # EXPLAINABLE AI
                 # ==========================================
                 st.subheader(
-                    " Explainable AI Visualization"
+                    " Explainable AI (Grad-CAM)"
                 )
 
-                heatmap_img = generate_heatmap(image)
+                try:
 
-                fig, ax = plt.subplots(
-                    figsize=(6,6)
-                )
-
-                ax.imshow(
-                    cv2.cvtColor(
-                        heatmap_img,
-                        cv2.COLOR_BGR2RGB
+                    heatmap = make_gradcam_heatmap(
+                        processed,
+                        model
                     )
-                )
 
-                ax.axis("off")
+                    # Resize heatmap
+                    heatmap = cv2.resize(
+                        heatmap,
+                        (
+                            image.size[0],
+                            image.size[1]
+                        )
+                    )
 
-                st.pyplot(fig)
+                    heatmap = np.uint8(
+                        255 * heatmap
+                    )
 
-                st.info("""
-                The highlighted regions indicate areas that strongly influenced
-                the prediction result.
-                """)
+                    # Color map
+                    heatmap = cv2.applyColorMap(
+                        heatmap,
+                        cv2.COLORMAP_JET
+                    )
+
+                    original = np.array(image)
+
+                    # Overlay heatmap
+                    superimposed_img = cv2.addWeighted(
+                        original,
+                        0.6,
+                        heatmap,
+                        0.4,
+                        0
+                    )
+
+                    fig, ax = plt.subplots(
+                        figsize=(6,6)
+                    )
+
+                    ax.imshow(
+                        cv2.cvtColor(
+                            superimposed_img.astype(
+                                "uint8"
+                            ),
+                            cv2.COLOR_BGR2RGB
+                        )
+                    )
+
+                    ax.axis("off")
+
+                    st.pyplot(fig)
+
+                except Exception as e:
+
+                    st.error(
+                        f"Grad-CAM Error: {e}"
+                    )
 
                 # ==========================================
                 # DOWNLOAD CSV
@@ -643,7 +662,7 @@ elif page == " Prediction":
                 )
 
                 st.download_button(
-                    label=" Download PDF Report",
+                    label="📄 Download PDF Report",
                     data=pdf_file,
                     file_name="fruit_prediction_report.pdf",
                     mime="application/pdf"
@@ -684,46 +703,31 @@ elif page == " Analytics":
 
         st.dataframe(history_df)
 
-        col1, col2 = st.columns(2)
+        # Pie Chart
+        pie_fig = px.pie(
+            history_df,
+            names="Prediction",
+            title="Prediction Distribution"
+        )
 
-        with col1:
+        st.plotly_chart(
+            pie_fig,
+            use_container_width=True
+        )
 
-            pie_fig = px.pie(
-                history_df,
-                names="Prediction",
-                title="Prediction Distribution"
-            )
+        # Line Chart
+        line_fig = px.line(
+            history_df,
+            x="Time",
+            y="Confidence",
+            color="Prediction",
+            markers=True,
+            title="Confidence Trend"
+        )
 
-            st.plotly_chart(
-                pie_fig,
-                use_container_width=True
-            )
-
-        with col2:
-
-            line_fig = px.line(
-                history_df,
-                x="Time",
-                y="Confidence",
-                color="Prediction",
-                markers=True,
-                title="Confidence Trend"
-            )
-
-            st.plotly_chart(
-                line_fig,
-                use_container_width=True
-            )
-
-        st.markdown("### Prediction History")
-
-        st.dataframe(history_df)
-
-        avg_conf = history_df["Confidence"].mean()
-
-        st.metric(
-            "Average Confidence",
-            f"{avg_conf:.2f}%"
+        st.plotly_chart(
+            line_fig,
+            use_container_width=True
         )
 
     else:
@@ -744,13 +748,13 @@ elif page == " About":
     ):
 
         st.write("""
-            This project is an AI-powered Fruit Freshness Classification System developed using Deep Learning and MobileNetV2. The system is designed to automatically determine whether a fruit is fresh or rotten by analyzing fruit images. It uses Artificial Intelligence (AI) and Computer Vision techniques to perform image-based classification accurately and efficiently.
+       This project is an AI-powered Fruit Freshness Classification System developed using Deep Learning and MobileNetV2. The system is designed to automatically determine whether a fruit is fresh or rotten by analyzing fruit images. It uses Artificial Intelligence (AI) and Computer Vision techniques to perform image-based classification accurately and efficiently.
 
-           The core of the system is based on Deep Learning, a subset of Artificial Intelligence that enables computers to learn patterns and features automatically from data. Instead of manually defining image features such as color, texture, or shape, the deep learning model learns these characteristics directly from thousands of training images.
+       The core of the system is based on Deep Learning, a subset of Artificial Intelligence that enables computers to learn patterns and features automatically from data. Instead of manually defining image features such as color, texture, or shape, the deep learning model learns these characteristics directly from thousands of training images.
 
-            The project uses MobileNetV2, a lightweight and efficient Convolutional Neural Network (CNN) architecture developed for image classification tasks. MobileNetV2 is particularly suitable for real-time applications because it provides high accuracy while requiring less computational power and memory compared to larger deep learning models.
+        The project uses MobileNetV2, a lightweight and efficient Convolutional Neural Network (CNN) architecture developed for image classification tasks. MobileNetV2 is particularly suitable for real-time applications because it provides high accuracy while requiring less computational power and memory compared to larger deep learning models.
 
-            During training, the model learns important visual patterns associated with fresh and rotten fruits, such as:
+        During training, the model learns important visual patterns associated with fresh and rotten fruits, such as:
 
             Color changes
             Texture differences
@@ -758,25 +762,24 @@ elif page == " About":
             Surface damage
             Shape irregularities
 
-            When a user uploads a fruit image, the system first preprocesses the image by resizing and normalizing it. The processed image is then passed to the trained MobileNetV2 model, which predicts whether the fruit is fresh or rotten. The system also displays a confidence score indicating how certain the model is about its prediction.
+        When a user uploads a fruit image, the system first preprocesses the image by resizing and normalizing it. The processed image is then passed to the trained MobileNetV2 model, which predicts whether the fruit is fresh or rotten. The system also displays a confidence score indicating how certain the model is about its prediction.
 
-            In addition, the project integrates Explainable AI using Grad-CAM (Gradient-weighted Class Activation Mapping). This technique generates heatmaps to highlight the image regions that most influenced the model’s prediction, improving transparency and interpretability.
+        In addition, the project integrates Explainable AI using Grad-CAM (Gradient-weighted Class Activation Mapping). This technique generates heatmaps to highlight the image regions that most influenced the model’s prediction, improving transparency and interpretability.
 
-            The entire system is deployed using Streamlit, an interactive Python framework for building machine learning web applications. The dashboard allows users to upload images, view predictions, analyze confidence scores, generate PDF reports, and visualize Explainable AI heatmaps in real time.""")
+        The entire system is deployed using Streamlit, an interactive Python framework for building machine learning web applications. The dashboard allows users to upload images, view predictions, analyze confidence scores, generate PDF reports, and visualize Explainable AI heatmaps in real time.""")
 
     with st.expander(
         " Technologies Used"
     ):
 
         st.write("""
-        - Python
-        - Streamlit
+        - TensorFlow / Keras
+        - MobileNetV2 CNN
         - OpenCV
-        - NumPy
+        - Streamlit
         - Plotly
-        - Pandas
-        - Matplotlib
         - ReportLab
+        - Grad-CAM Explainable AI
         """)
 
     with st.expander(
@@ -784,12 +787,10 @@ elif page == " About":
     ):
 
         st.write("""
-        - Real deep learning integration
         - Multi-fruit classification
-        - Fruit disease detection
-        - Mobile application support
-        - Real-time video prediction
-        - Cloud database integration
+        - Disease detection
+        - Real-time video analysis
+        - Mobile application
         """)
 
 # ==========================================
@@ -800,6 +801,7 @@ st.markdown("---")
 st.markdown("""
 <div class="footer">
 AI Fruit Freshness Detection System |
-Developed using Streamlit & Computer Vision
+Developed using Streamlit & TensorFlow
 </div>
 """, unsafe_allow_html=True)
+
